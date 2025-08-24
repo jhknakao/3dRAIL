@@ -13,7 +13,7 @@ If this source code is used, please cite the original papers of the major algori
 
 ### Step 1.
 
-You must download the Tensorlab package. As stated in the Tensorlab documentation, please cite:
+You must [download the Tensorlab package](https://tensorlab.net/). As stated in the Tensorlab documentation, please cite:
 
 * "Tensorlab 3.0--numerical optimization strategies for large-scale constrained and coupled matrix/tensor factorization" by N. Vervliet, O. Debals, and L. De Lathauwer, (2016).
 * "Tensorlab 3.0" by N. Vervliet et al., (2016).
