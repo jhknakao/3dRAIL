@@ -1,0 +1,102 @@
+function [Uout,Gout,rank] = lomac_012(Uin,Gin,tol,w1,w2,w3,Nx,Ny,Nz,dx,dy,dz,rhoM,JxM,JyM,JzM,kM,c,cc,xvals,yvals,zvals)
+% LoMaC truncation. Conserves zeroth and first moments (i.e., mass, momentum).
+
+rhoH = dx*dy*dz*sum(Uin{1},1)*tens2mat(Gin,1)*kron(sum(Uin{3},1)',sum(Uin{2},1)');
+JxH = dx*dy*dz*sum(xvals.*Uin{1},1)*tens2mat(Gin,1)*kron(sum(Uin{3},1)',sum(Uin{2},1)');
+JyH = dx*dy*dz*sum(Uin{1},1)*tens2mat(Gin,1)*kron(sum(Uin{3},1)',sum(yvals.*Uin{2},1)');
+JzH = dx*dy*dz*sum(Uin{1},1)*tens2mat(Gin,1)*kron(sum(zvals.*Uin{3},1)',sum(Uin{2},1)');
+kH =  dx*dy*dz*sum((xvals.^2).*Uin{1},1)*tens2mat(Gin/2,1)*kron(sum(Uin{3},1)',sum(Uin{2},1)')...
+    + dx*dy*dz*sum(Uin{1},1)*tens2mat(Gin/2,1)*kron(sum(Uin{3},1)',sum((yvals.^2).*Uin{2},1)')...
+    + dx*dy*dz*sum(Uin{1},1)*tens2mat(Gin/2,1)*kron(sum((zvals.^2).*Uin{3},1)',sum(Uin{2},1)');
+
+% Compute f1
+Vx_f1 = w1.*[ones(Nx,1),xvals,xvals.^2];
+Vy_f1 = w2.*[ones(Ny,1),yvals,yvals.^2];
+Vz_f1 = w3.*[ones(Nz,1),zvals,zvals.^2];
+S_f1 = zeros(3,3,3);
+S_f1(1,1,1) = rhoH/(dx*dy*dz*sum(w1)*sum(w2)*sum(w3));
+S_f1(2,1,1) = JxH/(dx*dy*dz*sum((xvals.^2).*w1)*sum(w2)*sum(w3));
+S_f1(1,2,1) = JyH/(dx*dy*dz*sum(w1)*sum((yvals.^2).*w2)*sum(w3));
+S_f1(1,1,2) = JzH/(dx*dy*dz*sum(w1)*sum(w2)*sum((zvals.^2).*w3));
+S_f1(1,1,1) = S_f1(1,1,1) - ((2*kH-c*rhoH)*c)/cc;
+S_f1(3,1,1) = (2*kH-c*rhoH)/cc;
+S_f1(1,3,1) = (2*kH-c*rhoH)/cc;
+S_f1(1,1,3) = (2*kH-c*rhoH)/cc;
+
+% Compute and truncate f2=f-f1
+[U2,G2] = tensoraddition(Uin,Gin,{Vx_f1,Vy_f1,Vz_f1},-S_f1);
+[G2_U,G2_G,~] = mlsvd(G2,tol); %truncate wrt tol
+SU_f2 = cell(1,3);
+SU_f2{1} = U2{1}*G2_U{1};
+SU_f2{2} = U2{2}*G2_U{2};
+SU_f2{3} = U2{3}*G2_U{3};
+SG_f2 = G2_G;
+if numel(SG_f2)==1
+    SU_f2{3} = [1];
+end
+if numel(SU_f2)==2 %if resulting hosvd/mlsvd is, e.g., size 1x1x1 (output as matrix)
+    SU_f2 = {SU_f2{1},SU_f2{2},[1]};
+end
+% Compute PN(trun(f2)), to subtract later to ensure zero moments.
+rho2 = dx*dy*dz*sum(SU_f2{1},1)*tens2mat(SG_f2,1)*kron(sum(SU_f2{3},1)',sum(SU_f2{2},1)');
+Jx2 = dx*dy*dz*sum(xvals.*SU_f2{1},1)*tens2mat(SG_f2,1)*kron(sum(SU_f2{3},1)',sum(SU_f2{2},1)');
+Jy2 = dx*dy*dz*sum(SU_f2{1},1)*tens2mat(SG_f2,1)*kron(sum(SU_f2{3},1)',sum(yvals.*SU_f2{2},1)');
+Jz2 = dx*dy*dz*sum(SU_f2{1},1)*tens2mat(SG_f2,1)*kron(sum(zvals.*SU_f2{3},1)',sum(SU_f2{2},1)');
+k2 =  dx*dy*dz*sum((xvals.^2).*SU_f2{1},1)*tens2mat(SG_f2/2,1)*kron(sum(SU_f2{3},1)',sum(SU_f2{2},1)')...
+    + dx*dy*dz*sum(SU_f2{1},1)*tens2mat(SG_f2/2,1)*kron(sum(SU_f2{3},1)',sum((yvals.^2).*SU_f2{2},1)')...
+    + dx*dy*dz*sum(SU_f2{1},1)*tens2mat(SG_f2/2,1)*kron(sum((zvals.^2).*SU_f2{3},1)',sum(SU_f2{2},1)');
+S_f2P = zeros(2,2,2);
+S_f2P(1,1,1) = rho2/(dx*dy*dz*sum(w1)*sum(w2)*sum(w3));
+S_f2P(2,1,1) = Jx2/(dx*dy*dz*sum((xvals.^2).*w1)*sum(w2)*sum(w3));
+S_f2P(1,2,1) = Jy2/(dx*dy*dz*sum(w1)*sum((yvals.^2).*w2)*sum(w3));
+S_f2P(1,1,2) = Jz2/(dx*dy*dz*sum(w1)*sum(w2)*sum((zvals.^2).*w3));
+S_f2P(1,1,1) = S_f2P(1,1,1) - ((2*k2-c*rho2)*c)/cc;
+S_f2P(3,1,1) = (2*k2-c*rho2)/cc;
+S_f2P(1,3,1) = (2*k2-c*rho2)/cc;
+S_f2P(1,1,3) = (2*k2-c*rho2)/cc;
+
+% Compute fM
+S_fM = zeros(3,3,3);
+S_fM(1,1,1) = rhoM/(dx*dy*dz*sum(w1)*sum(w2)*sum(w3));
+S_fM(2,1,1) = JxM/(dx*dy*dz*sum((xvals.^2).*w1)*sum(w2)*sum(w3));
+S_fM(1,2,1) = JyM/(dx*dy*dz*sum(w1)*sum((yvals.^2).*w2)*sum(w3));
+S_fM(1,1,2) = JzM/(dx*dy*dz*sum(w1)*sum(w2)*sum((zvals.^2).*w3));
+S_fM(1,1,1) = S_fM(1,1,1) - ((2*kM-c*rhoM)*c)/cc;
+S_fM(3,1,1) = (2*kM-c*rhoM)/cc;
+S_fM(1,3,1) = (2*kM-c*rhoM)/cc;
+S_fM(1,1,3) = (2*kM-c*rhoM)/cc;
+% Compute fM-PN(trun(f2)).
+% Since they share the same O.N. basis, only add(subtract) core matrices.
+% Redefine fM = fM-PN(trun(f2))
+
+% Final solution (make 1d bases orthonormal)
+[U,G] = tensoraddition({Vx_f1,Vy_f1,Vz_f1},S_fM-S_f2P,SU_f2,SG_f2);
+[Vx,Rx] = qr(U{1},0);
+[Vy,Ry] = qr(U{2},0);
+[Vz,Rz] = qr(U{3},0);
+[U,G] = mlsvd(lmlragen({Rx,Ry,Rz},G));
+U{1} = Vx*U{1};
+U{2} = Vy*U{2};
+U{3} = Vz*U{3};
+if numel(U)==2 %if resulting hosvd/mlsvd is, e.g., size 1x1x1 (output as matrix)
+    U = {U{1},U{2},[1]};
+end
+Uout = U;
+Gout = G;
+sz = size(Gout);
+if numel(sz)==2
+    rank = [sz(1),sz(2),1];
+else
+    rank = [sz(1),sz(2),sz(3)];
+end
+end
+
+
+
+
+
+
+
+
+
+
